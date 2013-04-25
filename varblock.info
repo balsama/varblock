@@ -1,0 +1,5 @@
+package = Custom
+name = Variable Block
+description = Generates a block with configurable variable content based on url params.
+core = 6.x
+version = 6.x-1.0

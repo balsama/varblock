@@ -1,0 +1,192 @@
+<?php
+/**
+* Implements hook_block().
+**/
+function varblock_block($op = 'list', $delta = 0, $edit = array()) {
+  if ($op == "list") {
+    $block['varblock'] = array(
+      'info' => t('Variable Block'),
+    );
+    return $block;
+  } // endif $op == "list"
+
+  elseif ($op == "view") {
+    $block_content = 'this varies';
+    $content = null;
+    // If param `varblock` is set, get the corresponding vars, theme the
+    // results and set the results as the block content.
+    if (isset($_GET['varblock'])) {
+      $vars = varblock_get_varset($_GET['varblock']);
+      $content = theme('varblock_contents', $vars[0], $vars[1]);
+    }
+    $block['subject'] = null;
+    $block['content'] = $content;
+    return $block;
+  } // endif $op == "view"
+
+  elseif ($op == "configure") {
+    $form['varblock_vars'] = array (
+      '#type' => 'fieldset',
+      '#title' => 'Veriable Sets',
+    );
+
+    // Create a div to hold the varsets and load the current varsets into it.
+    $varsets = variable_get('varblock_varsets', array());
+    $form['varblock_vars']['table']['#value'] = '<div id="var-table">' . varblock_table($varsets) . '</div>';
+
+    $form['varblock_vars']['var1'] = array (
+      '#type' => 'textfield',
+      '#title' => 'Variable 1',
+    );
+
+    $form['varblock_vars']['var2'] = array (
+      '#type' => 'textfield',
+      '#title' => 'Variable 2',
+    );
+
+    $form['varblock_vars']['submit'] = array (
+      '#type' => 'submit',
+      '#value' => 'Add Variable Set',
+      '#submit' => array('varblock_submit_var'),
+      '#ahah' => array(
+        'path' => 'varblock/table/add',
+        'wrapper' => 'var-table',
+        'method' => 'replace',
+        'effect' => 'fade',
+      ),
+    );
+
+    // Add some inline CSS to hide unprocessed AHAH elements.
+    $css = '
+      <style>
+      .varblock-table-form .form-submit {display: none;}
+      .varblock-table-form .form-submit.ahah-processed {display: block;}
+      </style>
+      ';
+    drupal_set_html_head($css);
+
+    return $form;
+  } // endif $op = "configure"
+
+  elseif ($op == "save") {
+    variable_set('varblock_vars', $edit['varblock_vars']);
+  } // endif $op = "save"
+}
+
+/**
+ * Implements hook_theme()
+ *
+ * See varblock-contents.tpl.php. Theme function for contents of block.
+ */
+function varblock_theme() {
+  return array(
+    'varblock_contents' => array(
+      'arguments' => array('var1' => null, 'var2' => null),
+      'template' => 'varblock-contents',
+    ),
+  );
+}
+
+/**
+ * Implements hook_menu().
+ *
+ * Page callback for AHAH response. If arg(2) = add, the new varset is added to
+ * the variable array and the new set of varsets is returned as a table. If arg(2)
+ * = delete, we delete the specified varset and then return the table.
+ */
+function varblock_menu() {
+  $items['varblock/table/%'] = array(
+    'title' => t('Varblock'),
+    'page callback' => 'varblock_html',
+    'access callback' => TRUE,
+    'type' => MENU_LOCAL_TASK,
+  );
+  return $items;
+}
+
+/**
+ * Generates the content of /varblock/table/% page and adds to/deletes from the
+ * varsets variable array.
+ */
+function varblock_html() {
+  $varsets = variable_get('varblock_varsets', array());
+  if (arg(2) == 'add') {
+    if (isset($_POST['var1'])) {
+      $varsets[user_password(10)] = array(
+        'var1' => $_POST['var1'],
+        'var2' => $_POST['var2'],
+      );
+    }
+  }
+  elseif (arg(2) == 'delete') {
+    if (isset($_POST['varblock_varset_id'])) {
+      unset($varsets[$_POST['varblock_varset_id']]);
+    }
+  }
+  variable_set('varblock_varsets', $varsets);
+  $table = varblock_table($varsets);
+  $contents = array(
+    'status' => TRUE,
+    'data' => $table,
+  );
+  return drupal_json($contents);
+}
+
+/**
+ * Takes an array of data and runs it through theme_table().
+ *
+ * @return string
+ *   Formatted HTML of a table containing the provided data
+ */
+function varblock_table($varsets) {
+  $header = array('ID', 'Variable 1', 'Variable2', '');
+  $data = array();
+  foreach ($varsets as $id => $varset) {
+    $data[] = array($id, $varset['var1'], $varset['var2'], drupal_get_form('varblock_varset_delete', $id));
+  }
+  return theme('table', $header, $data, array('class' => 'varblock-table-form'));
+}
+
+/**
+ * Helper function. Creates the delete form for each current varset in the
+ * varsets table
+ */
+function varblock_varset_delete(&$form_state, $id) {
+  $form = array();
+  $form['varblock_varset_id'] = array(
+    '#type' => 'hidden',
+    '#value' => $id,
+    '#default_value' => $id,
+  );
+  $form['varblock_varset_delete_' . $id] = array (
+    '#type' => 'submit',
+    '#value' => 'Delete',
+    '#submit' => array('varblock_submit_var'),
+    '#ahah' => array(
+      'path' => 'varblock/table/delete',
+      'wrapper' => 'var-table',
+      'method' => 'replace',
+      'effect' => 'fade',
+    ),
+  );
+
+  return $form;
+}
+
+/**
+ * @param string $varset_id
+ *   A string representing a varset
+ *
+ * @return array
+ *   Array of vars within the varset in the following format:
+ *     $vars = array(
+ *       0 => 'var1',
+ *       1 => 'var2',
+ *     );
+ */
+function varblock_get_varset($varset_id) {
+  $varsets = variable_get('varblock_varsets', array());
+  $vars = array($varsets[$varset_id]['var1'], $varsets[$varset_id]['var2']);
+  return $vars;
+}
+
