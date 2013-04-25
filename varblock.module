@@ -13,13 +13,25 @@ function varblock_block($op = 'list', $delta = 0, $edit = array()) {
   elseif ($op == "view") {
     $block_content = 'this varies';
     $content = null;
-    // If param `varblock` is set, get the corresponding vars, theme the
-    // results and set the results as the block content.
-    if (isset($_GET['varblock'])) {
-      $vars = varblock_get_varset($_GET['varblock']);
+    // If a varblock has already been set in this session, load that varset.
+    if (isset($_SESSION['varblock'])) {
+      $vars = varblock_get_varset($_SESSION['varblock']);
       $content = theme('varblock_contents', $vars[0], $vars[1]);
     }
+    // If param `varblock` is set, get the corresponding vars, theme the
+    // results and set the results as the block content. This overrides any
+    // previously set varset that may have existed in $_SESSION.
+    if (isset($_GET['varblock'])) {
+      $vars = varblock_get_varset($_GET['varblock']);
+      if ($vars) {
+        $content = theme('varblock_contents', $vars[0], $vars[1]);
+        $_SESSION['varblock'] = check_plain($_GET['varblock']);
+      }
+    }
     $block['subject'] = null;
+    // If URL param `varblock` is not set or if it is not a valid varset ID and
+    // ['varblock'] is not set in $_SESSION, $content will be set to `null`
+    // and, therefor, the block will not be rendered.
     $block['content'] = $content;
     return $block;
   } // endif $op == "view"
@@ -186,7 +198,12 @@ function varblock_varset_delete(&$form_state, $id) {
  */
 function varblock_get_varset($varset_id) {
   $varsets = variable_get('varblock_varsets', array());
-  $vars = array($varsets[$varset_id]['var1'], $varsets[$varset_id]['var2']);
-  return $vars;
+  if (isset($varsets[$varset_id])) {
+    $vars = array($varsets[$varset_id]['var1'], $varsets[$varset_id]['var2']);
+    return $vars;
+  }
+  else {
+    return FALSE;
+  }
 }
 
